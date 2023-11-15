@@ -1,0 +1,66 @@
+hdfs version
+hdfs dfs -ls
+hdfs dfs -mv data geoloc
+hdfs dfs -ls
+hdfs dfs -mkdir test
+hdfs dfs -copyFromLocal geolocation.csv hdfs:///user/cloudera/test
+
+sudo su hdfs
+hdfs dfs -chmod -R 777 /tmp
+exit
+
+hdfs dfs -ls test
+hdfs dfs -ls /tmp
+
+yarn jar /usr/lib/hadoop-mapreduce/hadoop-mapreduce-examples.jar pi 4 100
+yarn jar /usr/lib/hadoop-mapreduce/hadoop-mapreduce-examples.jar wordcount geoloc/geolocation.csv output
+hdfs dfs -cat output/part-r-00000
+hdfs dfs -ls output
+
+hdfs dfs -rm -r -f output
+yarn jar /usr/lib/hadoop-mapreduce/hadoop-mapreduce-examples.jar wordcount -D mapred.reduce.tasks=10 geoloc/geolocation.csv output
+hdfs dfs -ls output
+
+# Pig
+
+## Список городов:
+geoloc = LOAD 'geoloc/geolocation.csv' USING PigStorage(',') AS (truckid:chararray, driverid:chararray, event:chararray, latitude:double, longitude:double, city:chararray, state:chararray, velocity:double, event_ind:long, idling_ind:long);
+
+truck_ids = GROUP geoloc BY truckid;
+
+result = FOREACH truck_ids {
+    cities = FOREACH geoloc GENERATE city;
+    unique_cities = DISTINCT cities;
+    GENERATE group as truckid, unique_cities;
+};
+
+STORE result INTO 'results-cities';
+
+DUMP result;
+
+## Средняя скорость:
+geoloc = LOAD 'geoloc/geolocation.csv' USING PigStorage(',') AS (truckid:chararray, driverid:chararray, event:chararray, latitude:double, longitude:double, city:chararray, state:chararray, velocity:double, event_ind:long, idling_ind:long);
+
+truck_ids = GROUP geoloc BY truckid;
+
+result = FOREACH truck_ids GENERATE group as truckid, AVG(geoloc.velocity) as avg_velocity;
+
+STORE result INTO 'results-average';
+
+DUMP result;
+
+# Hive
+
+## Список городов
+SELECT truckid, collect_list(DISTINCT city) as cities FROM geolocation GROUP BY truckid;
+
+## Средняя скорость
+SELECT truckid, avg(velocity) as avg_velocity FROM geolocation GROUP BY truckid;
+
+# Impala
+
+## Количество посещенных каждым грузовиком локаций
+SELECT truckid, count(DISTINCT city) as cities FROM geolocation GROUP BY truckid;
+
+## Координаты грузовика
+SELECT latitude, longitude from geolocation WHERE truckid = "A80";
